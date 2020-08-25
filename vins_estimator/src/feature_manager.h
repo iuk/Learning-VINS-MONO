@@ -46,7 +46,7 @@ class FeaturePerId
   public:
     const int feature_id;
     int start_frame;
-    vector<FeaturePerFrame> feature_per_frame;
+    vector<FeaturePerFrame> feature_per_frame;  // 有哪些帧观察到此 Feature
 
     int used_num;
     bool is_outlier;

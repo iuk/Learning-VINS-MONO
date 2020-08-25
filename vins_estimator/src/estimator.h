@@ -84,7 +84,7 @@ class Estimator
     std_msgs::Header Headers[(WINDOW_SIZE + 1)];
 
     IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)]; // 滑动窗口中每帧图像对应一个IntegrationBase对象
-    Vector3d acc_0, gyr_0; // 最近一次接收到的IMU数据
+    Vector3d acc_0, gyr_0; // 上一次接收到的IMU数据，在 processIMU() 中更新
 
     // 滑动窗口中每一帧图像对应的预积分所用到的IMU数据存在3个缓存中
     vector<double> dt_buf[(WINDOW_SIZE + 1)]; // IMU数据对应的时间间隔

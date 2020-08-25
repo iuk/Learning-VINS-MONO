@@ -47,78 +47,90 @@ int FeatureManager::getFeatureCount()
  * 也就是说当前帧图像特征点存入feature中后，并不会立即判断是否将当前帧添加为新的关键帧，而是去判断当前帧的前一帧（第2最新帧）。
  * 当前帧图像要在下一次接收到图像时进行判断（那个时候，当前帧已经变成了第2最新帧）
  */
-bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td)
-{
-    ROS_DEBUG("input feature: %d", (int)image.size());
-    ROS_DEBUG("num of feature: %d", getFeatureCount());
-    double parallax_sum = 0; // 第2最新帧和第3最新帧之间跟踪到的特征点的总视差
-    int parallax_num = 0; // 第2最新帧和第3最新帧之间跟踪到的特征点的数量
-    last_track_num = 0; // 当前帧（第1最新帧）图像跟踪到的特征点的数量
+// Parallax 时差
+// image 类型：feature_id,{camera_id,[x,y,z,u,v,vx,vy]}
+// td：img 与 imu 的时间偏移值
+bool FeatureManager::addFeatureCheckParallax(
+    int frame_count,
+    const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
+    double td) {
 
-    // 把当前帧图像特征点数据image添加到feature容器中
-    // feature容器按照特征点id组织特征点数据，对于每个id的特征点，记录它被滑动窗口中哪些图像帧观测到了
-    for (auto &id_pts : image)
-    {
-        FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
+  ROS_DEBUG("input feature: %d", (int)image.size());
+  ROS_DEBUG("num of feature: %d", getFeatureCount());
+  
+  double parallax_sum = 0;  // 第2最新帧和第3最新帧之间跟踪到的特征点的总视差
+  int parallax_num    = 0;  // 第2最新帧和第3最新帧之间跟踪到的特征点的数量
+  last_track_num      = 0;  // 当前帧（第1最新帧）图像跟踪到的特征点的数量
 
-        int feature_id = id_pts.first;
+  // 把当前帧图像特征点数据image添加到feature容器中
+  // feature容器按照特征点id组织特征点数据，对于每个id的特征点，记录它被滑动窗口中哪些图像帧观测到了
 
-        /**
+  // 遍历特征点
+  for (auto &id_pts : image) {
+    // 构建 一个 FeaturePerFrame 类型
+    // 内容包括：x,y,z,u,v,vx,vy 和 img-imu 时间偏移
+    FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
+
+    // 特征 id
+    int feature_id = id_pts.first;
+
+    /**
          * STL find_if的用法：
          * find_if (begin, end, func)
          * 就是从begin开始 ，到end为止，返回第一个让 func这个函数返回true的iterator
          */
-        auto it = find_if(feature.begin(), feature.end(), [feature_id](const FeaturePerId &it)
-                          {
-            return it.feature_id == feature_id;
-                          });
+    // list<FeaturePerId> feature; // 管理滑动窗口中所有的特征点
+    auto it = find_if(feature.begin(), feature.end(), [feature_id](const FeaturePerId &it) {
+      return it.feature_id == feature_id;
+    });
 
-        // 返回尾部迭代器，说明该特征点第一次出现（在当前帧中新检测的特征点），需要在feature中新建一个FeaturePerId对象
-        if (it == feature.end())
-        {
-            feature.push_back(FeaturePerId(feature_id, frame_count));
-            feature.back().feature_per_frame.push_back(f_per_fra);
-        }
-        else if (it->feature_id == feature_id)
-        {
-            it->feature_per_frame.push_back(f_per_fra);
-            last_track_num++; // 当前帧（第1最新帧）图像跟踪到的特征点的数量
-        }
+    // 返回尾部迭代器，说明该特征点第一次出现
+    // （在当前帧中新检测的特征点），需要在feature中新建一个FeaturePerId对象
+    if (it == feature.end()) {
+      // 新建一个 FeaturePerId
+      feature.push_back(FeaturePerId(feature_id, frame_count));
+      feature.back().feature_per_frame.push_back(f_per_fra);
+    } 
+    // 如果在当前窗口中已存在此特征点
+    else if (it->feature_id == feature_id) {
+      it->feature_per_frame.push_back(f_per_fra);
+      last_track_num++;  // 当前帧（第1最新帧）图像跟踪到的特征点的数量
     }
+  }
 
-    // 1. 当前帧的帧号小于2，即为0或1，为0，则没有第2最新帧，为1，则第2最新帧是滑动窗口中的第1帧
-    // 2. 当前帧（第1最新帧）跟踪到的特征点数量小于20（？？？为什么当前帧的跟踪质量不好，就把第2最新帧当作关键帧？？？）
-    // 出现以上2种情况的任意一种，则认为第2最新帧是关键帧
-    if (frame_count < 2 || last_track_num < 20)
-        return true; // 第2最新帧是关键帧
+  // 1. 当前帧的帧号小于2，即为0或1，为0，则没有第2最新帧，为1，则第2最新帧是滑动窗口中的第1帧
+  // 2. 当前帧（第1最新帧）跟踪到的特征点数量小于20（？？？为什么当前帧的跟踪质量不好，就把第2最新帧当作关键帧？？？）
+  // 出现以上2种情况的任意一种，则认为第2最新帧是关键帧
+  // 如果判断为关键帧，则返回
+  if (frame_count < 2 || last_track_num < 20)
+    return true;  // 第2最新帧是关键帧
 
-    // 计算第2最新帧和第3最新帧之间跟踪到的特征点的平均视差
-    for (auto &it_per_id : feature)
-    {
-        if (it_per_id.start_frame <= frame_count - 2 &&
-            it_per_id.start_frame + int(it_per_id.feature_per_frame.size()) - 1 >= frame_count - 1)
-        {
-            // 对于给定id的特征点，计算第2最新帧和第3最新帧之间该特征点的视差（当前帧frame_count是第1最新帧）
-            //（需要使用IMU数据补偿由于旋转造成的视差）
-            parallax_sum += compensatedParallax2(it_per_id, frame_count);
-            parallax_num++;
-        }
-    }
+  // 如果不是关键帧，继续...
 
-    if (parallax_num == 0)
-    {
-        // 如果第2最新帧和第3最新帧之间跟踪到的特征点的数量为0，则把第2最新帧添加为关键帧
-        // ？？怎么会出现这种情况？？？？
-        // 如果出现这种情况，那么第2最新帧和第3最新帧之间的视觉约束关系不就没有了？？？
-        return true;
+  // 计算第2最新帧和第3最新帧之间跟踪到的特征点的平均视差
+  // 遍历当前窗口的所有特征点
+  for (auto &it_per_id : feature) 
+  {
+    if (it_per_id.start_frame <= frame_count - 2 &&
+        it_per_id.start_frame + int(it_per_id.feature_per_frame.size()) - 1 >= frame_count - 1) {
+      // 对于给定id的特征点，计算第2最新帧和第3最新帧之间该特征点的视差（当前帧frame_count是第1最新帧）
+      //（需要使用IMU数据补偿由于旋转造成的视差）
+      parallax_sum += compensatedParallax2(it_per_id, frame_count);
+      parallax_num++;
     }
-    else
-    {
-        // 计算平均视差
-        ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
-        ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
-        return parallax_sum / parallax_num >= MIN_PARALLAX; // 如果平均视差大于设定的阈值，则把第2最新帧当作关键帧
-    }
+  }
+
+  if (parallax_num == 0) {
+    // 如果第2最新帧和第3最新帧之间跟踪到的特征点的数量为0，则把第2最新帧添加为关键帧
+    // ？？怎么会出现这种情况？？？？
+    // 如果出现这种情况，那么第2最新帧和第3最新帧之间的视觉约束关系不就没有了？？？
+    return true;
+  } else {
+    // 计算平均视差
+    ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
+    ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
+    return parallax_sum / parallax_num >= MIN_PARALLAX;  // 如果平均视差大于设定的阈值，则把第2最新帧当作关键帧
+  }
 }
 
 void FeatureManager::debugShow()
