@@ -9,9 +9,23 @@ using namespace Eigen;
 class IntegrationBase {
  public:
   IntegrationBase() = delete;
-  IntegrationBase(const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,
-                  const Eigen::Vector3d &_linearized_ba, const Eigen::Vector3d &_linearized_bg)
-      : acc_0{_acc_0}, gyr_0{_gyr_0}, linearized_acc{_acc_0}, linearized_gyr{_gyr_0}, linearized_ba{_linearized_ba}, linearized_bg{_linearized_bg}, jacobian{Eigen::Matrix<double, 15, 15>::Identity()}, covariance{Eigen::Matrix<double, 15, 15>::Zero()}, sum_dt{0.0}, delta_p{Eigen::Vector3d::Zero()}, delta_q{Eigen::Quaterniond::Identity()}, delta_v{Eigen::Vector3d::Zero()}
+  // 构造一个 积分 base 需要最新的  acc/gyr/bias估计
+  IntegrationBase(const Eigen::Vector3d &_acc_0,
+                  const Eigen::Vector3d &_gyr_0,
+                  const Eigen::Vector3d &_linearized_ba,
+                  const Eigen::Vector3d &_linearized_bg)
+      : acc_0{_acc_0},
+        gyr_0{_gyr_0},
+        linearized_acc{_acc_0},
+        linearized_gyr{_gyr_0},
+        linearized_ba{_linearized_ba},
+        linearized_bg{_linearized_bg},
+        jacobian{Eigen::Matrix<double, 15, 15>::Identity()},
+        covariance{Eigen::Matrix<double, 15, 15>::Zero()},
+        sum_dt{0.0},
+        delta_p{Eigen::Vector3d::Zero()},
+        delta_q{Eigen::Quaterniond::Identity()},
+        delta_v{Eigen::Vector3d::Zero()}
 
   {
     noise                     = Eigen::Matrix<double, 18, 18>::Zero();
@@ -22,6 +36,39 @@ class IntegrationBase {
     noise.block<3, 3>(12, 12) = (ACC_W * ACC_W) * Eigen::Matrix3d::Identity();
     noise.block<3, 3>(15, 15) = (GYR_W * GYR_W) * Eigen::Matrix3d::Identity();
   }
+
+
+    // 中值积分需要使用前后两个时刻的IMU数据
+  double dt;                     // 前后两个时刻的时间间隔
+  Eigen::Vector3d acc_0, gyr_0;  // 前一帧IMU数据中的加速度计测量值和陀螺仪测量值
+  Eigen::Vector3d acc_1, gyr_1;  // 后一帧IMU数据中的加速度计测量值和陀螺仪测量值
+
+  const Eigen::Vector3d linearized_acc, linearized_gyr;  // 这一段预积分初始时刻的IMU测量值，作为常量一直保存，在IntegrationBase对象创建时指定
+  Eigen::Vector3d linearized_ba, linearized_bg;          // 这一段预积分对应的加速度计偏置和陀螺仪偏置
+
+  // jacobian: 当前误差状态量关于预积分初始时刻误差状态量的雅可比矩阵
+  // covariance: 误差状态的协方差矩阵
+  Eigen::Matrix<double, 15, 15> jacobian, covariance;
+  Eigen::Matrix<double, 15, 15> step_jacobian;  //似乎是用来调试程序的临时变量
+  Eigen::Matrix<double, 15, 18> step_V;         //似乎是用来调试程序的临时变量
+  Eigen::Matrix<double, 18, 18> noise;          // 误差状态传播方程中的噪声的协方差矩阵
+
+  double sum_dt;  // 这一段预积分的总时间间隔
+
+  // delta_p、delta_q和delta_v是标称状态的预积分
+  // delta_p表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的位置
+  // delta_q表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的旋转
+  // delta_v表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的速度
+  Eigen::Vector3d delta_p;
+  Eigen::Quaterniond delta_q;
+  Eigen::Vector3d delta_v;  // 相对速度变化量
+
+  // 该段预积分所使用的IMU数据的缓存vector
+  // 这3个缓存的作用是：当bias变换过大时，需要使用这些数据重新进行预积分
+  std::vector<double> dt_buf;
+  std::vector<Eigen::Vector3d> acc_buf;
+  std::vector<Eigen::Vector3d> gyr_buf;
+
 
   void push_back(double dt, const Eigen::Vector3d &acc, const Eigen::Vector3d &gyr) {
     dt_buf.push_back(dt);
@@ -214,37 +261,6 @@ class IntegrationBase {
     residuals.block<3, 1>(O_BG, 0) = Bgj - Bgi;
     return residuals;
   }
-
-  // 中值积分需要使用前后两个时刻的IMU数据
-  double dt;                     // 前后两个时刻的时间间隔
-  Eigen::Vector3d acc_0, gyr_0;  // 前一帧IMU数据中的加速度计测量值和陀螺仪测量值
-  Eigen::Vector3d acc_1, gyr_1;  // 后一帧IMU数据中的加速度计测量值和陀螺仪测量值
-
-  const Eigen::Vector3d linearized_acc, linearized_gyr;  // 这一段预积分初始时刻的IMU测量值，作为常量一直保存，在IntegrationBase对象创建时指定
-  Eigen::Vector3d linearized_ba, linearized_bg;          // 这一段预积分对应的加速度计偏置和陀螺仪偏置
-
-  // jacobian: 当前误差状态量关于预积分初始时刻误差状态量的雅可比矩阵
-  // covariance: 误差状态的协方差矩阵
-  Eigen::Matrix<double, 15, 15> jacobian, covariance;
-  Eigen::Matrix<double, 15, 15> step_jacobian;  //似乎是用来调试程序的临时变量
-  Eigen::Matrix<double, 15, 18> step_V;         //似乎是用来调试程序的临时变量
-  Eigen::Matrix<double, 18, 18> noise;          // 误差状态传播方程中的噪声的协方差矩阵
-
-  double sum_dt;  // 这一段预积分的总时间间隔
-
-  // delta_p、delta_q和delta_v是标称状态的预积分
-  // delta_p表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的位置
-  // delta_q表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的旋转
-  // delta_v表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的速度
-  Eigen::Vector3d delta_p;
-  Eigen::Quaterniond delta_q;
-  Eigen::Vector3d delta_v;
-
-  // 该段预积分所使用的IMU数据的缓存vector
-  // 这3个缓存的作用是：当bias变换过大时，需要使用这些数据重新进行预积分
-  std::vector<double> dt_buf;
-  std::vector<Eigen::Vector3d> acc_buf;
-  std::vector<Eigen::Vector3d> gyr_buf;
 };
 /*
 

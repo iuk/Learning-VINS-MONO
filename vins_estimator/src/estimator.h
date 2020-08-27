@@ -52,7 +52,7 @@ class Estimator
 
     enum SolverFlag
     {
-        INITIAL, // 还未成功初始化
+        INITIAL, // 还未成功初始化，需要初始化
         NON_LINEAR // 已成功初始化，正处于紧耦合优化状态
     };
 
@@ -84,7 +84,7 @@ class Estimator
     std_msgs::Header Headers[(WINDOW_SIZE + 1)];
 
     IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)]; // 滑动窗口中每帧图像对应一个IntegrationBase对象
-    Vector3d acc_0, gyr_0; // 上一次接收到的IMU数据，在 processIMU() 中更新
+    Vector3d acc_0, gyr_0; // 已有的最新IMU数据，在 processIMU() 中更新
 
     // 滑动窗口中每一帧图像对应的预积分所用到的IMU数据存在3个缓存中
     vector<double> dt_buf[(WINDOW_SIZE + 1)]; // IMU数据对应的时间间隔
@@ -122,8 +122,10 @@ class Estimator
     vector<double *> last_marginalization_parameter_blocks;
 
     // 存储所有的ImageFrame对象（每读取一帧图像就会构建ImageFrame对象）
-    // 键是图像帧的时间戳，值是ImageFrame对象，ImageFrame对象中保存了图像帧的位姿，相应的预积分和图像特征点信息
+    // 键是图像帧的时间戳，值是ImageFrame对象，
+    // ImageFrame对象中保存了图像帧的位姿，相应的预积分和图像特征点信息
     map<double, ImageFrame> all_image_frame; 
+    
     IntegrationBase *tmp_pre_integration; // 用于在创建ImageFrame对象时，把该指针赋给imageframe.pre_integration
 
     //relocalization variable

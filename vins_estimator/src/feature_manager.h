@@ -30,7 +30,7 @@ class FeaturePerFrame
         cur_td = td;
     }
     double cur_td;
-    Vector3d point;
+    Vector3d point; 
     Vector2d uv;
     Vector2d velocity;
     double z;
@@ -45,8 +45,8 @@ class FeaturePerId
 {
   public:
     const int feature_id;
-    int start_frame;
-    vector<FeaturePerFrame> feature_per_frame;  // 有哪些帧观察到此 Feature
+    int start_frame;  // 第一个观察到此特征点的帧 id
+    vector<FeaturePerFrame> feature_per_frame;  // 此特征点在不同帧下的 7 维属性(xyz uv vxvy)
 
     int used_num;
     bool is_outlier;
@@ -57,9 +57,11 @@ class FeaturePerId
     Vector3d gt_p;
 
     FeaturePerId(int _feature_id, int _start_frame)
-        : feature_id(_feature_id), start_frame(_start_frame),
-          used_num(0), estimated_depth(-1.0), solve_flag(0)
-    {
+        : feature_id(_feature_id),
+          start_frame(_start_frame),
+          used_num(0),
+          estimated_depth(-1.0),
+          solve_flag(0) {
     }
 
     int endFrame();
@@ -90,7 +92,7 @@ class FeatureManager
     void removeBack();
     void removeFront(int frame_count);
     void removeOutlier();
-    list<FeaturePerId> feature; // 管理滑动窗口中所有的特征点
+    list<FeaturePerId> feature; // 管理滑动窗口中所有的 Feature id
     int last_track_num; // 最新帧图像跟踪到的特征点的数量
 
   private:

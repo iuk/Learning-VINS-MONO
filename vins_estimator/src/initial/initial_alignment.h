@@ -21,11 +21,21 @@ class ImageFrame {
         is_key_frame{false} {
     points = _points;
   };
-  map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> points;
+
+  // 特征 id 与特征的 7 维信息：x y z u v vx vy
+  map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> points; 
+  
+  // 时间戳, 单位 s
   double t;
+  
+  // 世界系的 R T ?
   Matrix3d R;
   Vector3d T;
+  
+  // 预积分信息
   IntegrationBase *pre_integration;
+  
+  // 是不是 keyframe
   bool is_key_frame;
 };
 
