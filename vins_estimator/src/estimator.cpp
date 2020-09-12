@@ -484,6 +484,7 @@ bool Estimator::initialStructure() {
  *              得到尺度s和重力g的方向后，需更新所有图像帧在世界坐标系下的Ps、Rs、Vs
  * @return  bool true：成功
  */
+// 视觉初始化与对齐
 bool Estimator::visualInitialAlign() {
   TicToc t_g;
   VectorXd x;

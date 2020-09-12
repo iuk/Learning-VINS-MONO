@@ -37,14 +37,16 @@ class IntegrationBase {
     noise.block<3, 3>(15, 15) = (GYR_W * GYR_W) * Eigen::Matrix3d::Identity();
   }
 
-
-    // 中值积分需要使用前后两个时刻的IMU数据
+  // 中值积分需要使用前后两个时刻的IMU数据
   double dt;                     // 前后两个时刻的时间间隔
   Eigen::Vector3d acc_0, gyr_0;  // 前一帧IMU数据中的加速度计测量值和陀螺仪测量值
   Eigen::Vector3d acc_1, gyr_1;  // 后一帧IMU数据中的加速度计测量值和陀螺仪测量值
 
-  const Eigen::Vector3d linearized_acc, linearized_gyr;  // 这一段预积分初始时刻的IMU测量值，作为常量一直保存，在IntegrationBase对象创建时指定
-  Eigen::Vector3d linearized_ba, linearized_bg;          // 这一段预积分对应的加速度计偏置和陀螺仪偏置
+  // 这一段预积分初始时刻的IMU测量值，作为常量一直保存，在IntegrationBase对象创建时指定
+  const Eigen::Vector3d linearized_acc, linearized_gyr;  
+  
+  // 这一段预积分对应的加速度计偏置和陀螺仪偏置
+  Eigen::Vector3d linearized_ba, linearized_bg;          
 
   // jacobian: 当前误差状态量关于预积分初始时刻误差状态量的雅可比矩阵
   // covariance: 误差状态的协方差矩阵
@@ -55,13 +57,14 @@ class IntegrationBase {
 
   double sum_dt;  // 这一段预积分的总时间间隔
 
-  // delta_p、delta_q和delta_v是标称状态的预积分
+  // delta_p、delta_q和delta_v是 标称状态的预积分
   // delta_p表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的位置
-  // delta_q表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的旋转
   // delta_v表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的速度
+  // delta_q表示该段预积分初始时刻本体坐标系下，当前时刻本体坐标系的姿态
+  // 论文中的 α β γ
   Eigen::Vector3d delta_p;
-  Eigen::Quaterniond delta_q;
   Eigen::Vector3d delta_v;  // 相对速度变化量
+  Eigen::Quaterniond delta_q;
 
   // 该段预积分所使用的IMU数据的缓存vector
   // 这3个缓存的作用是：当bias变换过大时，需要使用这些数据重新进行预积分

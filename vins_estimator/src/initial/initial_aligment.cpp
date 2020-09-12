@@ -17,50 +17,66 @@
  * @param  Bgs             [陀螺仪bias]
  * 这部分可以参考文献[1]中公式(15)部分(注：'表示求逆)
  *
- * Min sum||q_cb1' × q_cb0 × r_bkbk+1||      (1)
+ * Min sum||q_cb1' × q_cb0 × γ_bkbk+1||      (1)
  *
+ * Min sum||q_b1_c × q_c_b0 × γ_b0_b1||
+ * 
  * 公式(15)的最小值是1(q(1,(0,0,0)，所以将其前半部分移到右边得
- *            |     1   |
- * r_bkbk+1^ ·| 1/2·J·bw|=q_cb0' q_cb1        (2)
+ * 
+ *            |     1    |
+ * γ_b0_b1^  ·| 1/2·J·δbw| = q_b1_c × q_c_b0        (2)
  *
- *            |     1   |
- *            | 1/2·J·bw|=r_bkbk+1^' × q_cb0' × q_cb1        (3)
+ *            |     1    |
+ *            | 1/2·J·δbw| = γ_b0_b1^' × q_b1_c × q_c_b0        (3)
  *
  * 只取四元数的虚部并求解，
- *            JTJ·bw = 2JT(r_bkbk+1^' × q_cb0' × q_cb1).vec  (4)
- * 即，A·bw=b，将多个帧综合起来为
- *            sum(A)bw = sum(b)                              (5)
+ *            JTJ·bw = 2JT(γ_b0_b1^' × q_b1_c × q_c_b0).vec  (4)
+ * 
+ * 即，A·δbw=b，将多个帧综合起来为
+ *            sum(A)δbw = sum(b)                              (5)
  */
+// VINS MONO 论文 公式 15
+// 输入 
+// 输出 Bgs bias_gyr
+// all_image_frame 来自于 estimator.h 中的 all_image_frame
 void solveGyroscopeBias(map<double, ImageFrame> &all_image_frame, Vector3d *Bgs) {
   Matrix3d A;
   Vector3d b;
   Vector3d delta_bg;
   A.setZero();
   b.setZero();
+
+  // 遍历所有帧
   map<double, ImageFrame>::iterator frame_i;
   map<double, ImageFrame>::iterator frame_j;
-  
-  // 遍历所有帧
   for (frame_i = all_image_frame.begin(); next(frame_i) != all_image_frame.end(); frame_i++) 
   {
-    // 当前帧的下一帧
+    // 当前帧 frame_i
+    // 下一帧 frame_j
     frame_j = next(frame_i);
     MatrixXd tmp_A(3, 3);
     tmp_A.setZero();
     VectorXd tmp_b(3);
     tmp_b.setZero();
-    // i 帧系下的 j 帧姿态 
+
+    // q_ij：纯视觉得到的 i 帧系下的 j 帧姿态 
     Eigen::Quaterniond q_ij(frame_i->second.R.transpose() * frame_j->second.R);
+    
     //tmp_A = J_j_bw
     tmp_A = frame_j->second.pre_integration->jacobian.template block<3, 3>(O_R, O_BG);
-    //tmp_b = 2 * (r^bk_bk+1)^-1 * (q^c0_bk)^-1 * (q^c0_bk+1)
+    
+    //tmp_b = 2 * (r^bk_{bk+1})^-1 * (q^c0_bk)^-1 * (q^c0_{bk+1})
     //      = 2 * (r^bk_bk+1)^-1 * q_ij
+    // frame_j->second.pre_integration->delta_q.inverse()：j 系下 i 系的姿态
+    // frame_j->second.pre_integration->delta_q ： IMU 预积分得到的 i 帧系下的 j 帧姿态
     tmp_b = 2 * (frame_j->second.pre_integration->delta_q.inverse() * q_ij).vec();
+    
     //tmp_A * delta_bg = tmp_b
     A += tmp_A.transpose() * tmp_A;
     b += tmp_A.transpose() * tmp_b;
   }
 
+  // Eigen ldlt 线性方程求解 Ax=b
   delta_bg = A.ldlt().solve(b);
   ROS_WARN_STREAM("gyroscope bias initial calibration " << delta_bg.transpose());
 

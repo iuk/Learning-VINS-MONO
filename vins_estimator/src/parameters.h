@@ -48,6 +48,7 @@ enum SIZE_PARAMETERIZATION
     SIZE_FEATURE = 1
 };
 
+// 状态顺序，各 3 维
 enum StateOrder
 {
     O_P = 0,
